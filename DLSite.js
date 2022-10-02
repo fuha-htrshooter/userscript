@@ -5,6 +5,7 @@
 // @description  買い物記録シートに貼り付ける用のTSVを生成する。
 //               2020.04.25 サイト構成変更に対応
 //               2021.12.22 「あとで買う」を除外
+//               2022.06.11 クーポン情報も追加するよう改良
 // @author       fuha
 // @match        https://www.dlsite.com/*/cart
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js
@@ -22,7 +23,9 @@
           '</textarea></div>').appendTo(".confirm_title");
 
         // アイテム毎に情報を取得してテキストエリアに結合
+        var itemNum = 0;
         $(".buy_now .cart_list_item").not("._removed").each(function(index, element) {
+            itemNum++;
             var cartData = $("#forcopyarea").text();
 
             // 定価情報をAPIからAjaxで取得
@@ -59,5 +62,26 @@
                 + discount + "\t"+ point + "\r\n";
             $("#forcopyarea").text(cartData);
         });
+
+        // クーポン情報を末尾に追記
+        setTimeout($(".coupon_available").each(function(index, element) {
+            var cartData = $("#forcopyarea").text();
+
+            // クーポン名
+            var couponName = $(element).find(".coupon_name").text();
+            // 割引後価格
+            var couponAmount = parseInt($(element).find(".coupon_detail .total").text().replace(",", ""));
+            // 割引前価格
+            var amount = parseInt($("._payment_amount").text().replace(",", ""));
+
+            var dt = new Date();
+            var today = dt.getFullYear() + "/"
+            + (dt.getMonth() < 9 ? "0" : "") + (dt.getMonth() + 1) + "/"
+            + (dt.getDate() < 10 ? "0" : "") + dt.getDate();
+
+            cartData = cartData + today + "\t" + couponName + "\t\t" + (couponAmount - amount)
+                + "\t\t\r\n";
+            $("#forcopyarea").text(cartData);
+        }), itemNum * 500);
     });
 })();
