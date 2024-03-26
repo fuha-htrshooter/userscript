@@ -1,23 +1,32 @@
 // ==UserScript==
 // @name         DDRプレイ履歴コピー
 // @namespace    https://github.com/fuha-htrshooter/
-// @version      0.2
-// @description  「最近プレーした楽曲」画面の表示時、表示内容をコピペ用テキストにしたダイアログを出力する。
+// @version      0.3
+// @description  「最近プレーした楽曲」画面に、表示内容をコピペ用テキストにするボタンを追加する。
 // @match        https://p.eagate.573.jp/game/ddr/ddra*/p/playdata/music_recent.html
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=573.jp
-// @grant        none
+// @grant        GM_setClipboard
 // ==/UserScript==
+
+function add_button(appendParent, addEventFunction) {
+    const zNode = document.createElement ("div");
+    zNode.innerHTML = '<button id="myButton" type="button" style="display: block; text-align: center; vertical-align: middle; text-decoration: none; margin: auto; padding: 0.25rem 1rem; font-weight: bold; border: 2px solid #27acd9; background: #27acd9; color: #fff; transition: 0.5s;">TSVコピー</button>';
+    zNode.setAttribute("id", "myContainer");
+    appendParent.childNodes[0].setAttribute("style", "width: 88%; float: left")
+    appendParent.appendChild(zNode);
+    document.getElementById("myButton").addEventListener("click", addEventFunction, false);
+}
 
 (function() {
     'use strict';
 
-    $(function() {
+    add_button(document.getElementsByTagName("h2")[0], function (e) {
         // 出力文字列バッファ
         var text = '';
 
         // 記録済みの最新プレー日時を入力（省略時は全件出力）
-        var inputTs = prompt("記録済プレー日時");
-        var recentTs = (inputTs != "")  ? new Date(inputTs) : null;
+        var inputTs = prompt("記録済の最終プレー日時を入力");
+        var recentTs = (inputTs != "") ? new Date(inputTs) : null;
 
         // 行ごとにテーブル処理
         $('#data_tbl tr').each(function(rownum) {
@@ -59,6 +68,29 @@
         });
 
         // ダイアログ出力
-        alert(text);
-    })
+        if (text == "") {
+            // コピー不要
+            alert("[対象なし] 記録が必要な履歴はありません。");
+        } else {
+            var lineNum = (text.match(/\n/g) || []).length;
+            if (lineNum < 50) {
+                // 通常コピー
+                GM_setClipboard(text);
+                alert("[正常終了] " + lineNum + "行コピーしました。");
+            } else {
+                // 記録漏れあり (コメント行を追加)
+                const dt = new Date(new Date(inputTs).getTime() + 1000);
+                const year = dt.getFullYear();
+                const month = dt.getMonth() + 1;
+                const day = dt.getDate();
+                const hours = dt.getHours();
+                const minutes = dt.getMinutes();
+                const seconds = dt.getSeconds();
+                text += `記録漏れ\t-\t-\t-\t${year}-${month}-${day} ${hours}:${minutes}:${seconds}\n`;
+
+                GM_setClipboard(text);
+                alert("[警告] 末尾まで到達。記録漏れの可能性があります。");
+            }
+        }
+    });
 })();
