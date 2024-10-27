@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         DDRプレイ履歴コピー
+// @name          DDRプレイ履歴コピー
 // @namespace    https://github.com/fuha-htrshooter/
-// @version      0.3
+// @version      0.4  2024/09/13  DDR WORLD対応
 // @description  「最近プレーした楽曲」画面に、表示内容をコピペ用テキストにするボタンを追加する。
-// @match        https://p.eagate.573.jp/game/ddr/ddra*/p/playdata/music_recent.html
+// @match        https://p.eagate.573.jp/game/ddr/ddr*/playdata/music_recent.html
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=573.jp
 // @grant        GM_setClipboard
 // ==/UserScript==
@@ -35,30 +35,22 @@ function add_button(appendParent, addEventFunction) {
             if (recentTs == null || recentTs < currentTs) {
                 // 1行分のバッファ配列
                 var row = [];
-                // プレイスタイル表記 ("SP-" or "DP-")
-                var playStyle = '';
 
                 // 列ごとに行処理
                 $(this).find('td').each(function(colnum) {
-                    // 詳細ページへのリンクからプレイスタイル取得 (後続列の変換で使用)
-                    var linkSrc = $(this).find('a[href^="/game/ddr/ddra3/p/playdata/music_detail.html?index="]').attr('href');
-                    if (linkSrc) {
-                        playStyle = (linkSrc.slice(-1) <= 4) ? "SP-" : "DP-";
-                    }
-
-                    // 変換処理
-                    var colTxt = $(this).text().trim();
-                    var rankSrc = $(this).find('img[src^="/game/ddr/ddra3/p/images/play_data/rank_"]').attr('src');
-                    if (rankSrc) {
-                        // ランク列：画像をURLから文字列化
-                        var rankText = rankSrc.split('/').pop().split('?')[0].replace(/rank_s_|\.png/g, "");
-                        row.push(rankText.replace("_p", "+").replace("_m", "-").toUpperCase());
-                    } else if (/^(BEGINNER|BASIC|DIFFICULT|EXPERT|CHALLENGE)$/.test(colTxt)) {
-                        // 難易度列：プレイスタイルを前に追加
-                        row.push(playStyle + colTxt);
+                    if (colnum == 1) {
+                        // 難易度
+                        var styleTxt = $(this).find('[class="style"]').text().replace("DOUBLE","DP-").replace("SINGLE","SP-");
+                        var difficultTxt = $(this).find('[class="difficulty"]').text();
+                        row.push(styleTxt + difficultTxt);
+                    } else if (colnum == 2) {
+                        // ランク
+                        var rankSrc = $(this).find('img[src^="/game/ddr/ddrworld/images/playdata/rank_"]').attr('src');
+                        var rankTxt = rankSrc.split('/').pop().split('?')[0].replace(/rank_s_|\.png/g, "");
+                        row.push(rankTxt.replace("_p", "+").replace("_m", "-").toUpperCase());
                     } else {
-                        // 上記以外：そのまま設定
-                        row.push(colTxt);
+                        // 上記以外
+                        row.push($(this).text().trim());
                     }
                 });
 
