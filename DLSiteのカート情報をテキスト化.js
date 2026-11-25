@@ -1,16 +1,22 @@
 // ==UserScript==
-// @name         DDRプレイ履歴送信
-// @namespace    https://github.com/fuha-htrshooter/
-// @version      0.6
-// @description  「最近プレーした楽曲」画面に、表内容をJSONでPOSTするボタンを追加する
-// @match        https://p.eagate.573.jp/game/ddr/ddr*/playdata/music_recent.html
-// @icon         https://www.google.com/s2/favicons?sz=64&domain=p.eagate.573.jp
+// @name         DLSiteのカート情報をテキスト化
+// @namespace    http://tampermonkey.net/
+// @version      0.3
+// @description  カート情報をJSONでPOST送信する。受信側のGoogleスプレッドシートスクリプトと併用する。
+// @author       fuha
+// @match        https://www.dlsite.com/home/cart
+// @match        https://www.dlsite.com/maniax/cart
+// @match        https://www.dlsite.com/books/cart
+// @match        https://www.dlsite.com/pro/cart
+// @match        https://www.dlsite.com/aix/cart
+// @require      https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js
+// @icon            https://www.google.com/s2/favicons?sz=64&domain=www.dlsite.com
 // @grant        GM_xmlhttpRequest
 // ==/UserScript==
 
 function add_button(appendParent, addEventFunction) {
     const zNode = document.createElement ("div");
-    zNode.innerHTML = '<button id="myButton" type="button" style="padding: 0.35rem 1rem; font-weight: bold; border: 2px solid #27acd9; background: #27acd9; color: #fff">送信</button>';
+    zNode.innerHTML = '<button id="myButton" type="button" style="padding: 0.35rem 1rem; font-weight: bold; border: 2px solid #27acd9; background: #27acd9; color: #fff">保存</button>';
     zNode.setAttribute("id", "myContainer");
     appendParent.appendChild(zNode);
     document.getElementById("myButton").addEventListener("click", addEventFunction, false);
@@ -19,43 +25,77 @@ function add_button(appendParent, addEventFunction) {
 (function() {
     'use strict';
 
+    // ポイント還元率 (指定決済による固定還元前提)
+    const POINT_PERCENT = 5
     // 受信したJSONを元に差分登録するスクリプト
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbxrmfvUThg6E4_-X--TlWVoB1wleEPL5mDWgKngTDlbPdJ7cmhuM2N8myr4wCOGlzxb/exec";
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbxkXIgA2eyp9U7pfh_HHp4RrTlzuJNmg6tpWtFYa2ZHN3iz0InQe_-qRi_qmKgQ0M6o/exec"
 
-    add_button(document.getElementsByTagName("h2")[0], function (e) {
+    // ボタン追加
+    add_button(document.querySelector(".payment_confirm_box"), function (e) {
         // 出力バッファ
         var data = [];
 
-        // 行ごとにテーブル処理
-        $('table.table-ui tbody tr').each(function(rownum) {
-            // 曲名
-            const name = $(this).find('.music-name').text().trim();
-            // 難易度
-            const difficulty = $(this).find('.diff-style-container .diff').contents()
-            .filter(function(){return this.nodeType==Node.TEXT_NODE}).text().trim();
-            const style = $(this).find('.diff-style-container .level').text().trim()
-            .replace("DOUBLE","DP-").replace("SINGLE","SP-");
-            // スコア
-            const score = $(this).find('.score').text().trim();
-            // ランク
-            const rankSrc = $(this).find('.rank img[src*="/images/playdata/rank_"]').attr('src');
-            const rank = rankSrc.split('/').pop().split('?')[0].replace(/rank_s_|\.png/g, "")
-            .replace("_p", "+").replace("_m", "-").toUpperCase();
-            // 日時
-            const timestamp =  $(this).find('.date').text().trim();
+        // 購入日
+        const dt = new Date();
+        const today = dt.getFullYear() + "/" +
+              (dt.getMonth() < 9 ? "0" : "") + (dt.getMonth() + 1) + "/" +
+              (dt.getDate() < 10 ? "0" : "") + dt.getDate();
 
-            // 1行分を追加
+        // アイテム毎に情報を取得して追加
+        $('.buy_now .cart_list_item:not([class~="_removed"])').each(function(index, element) {
+            // 製品ID (画像URLから取得)
+            const productId = $(element).find(".work_thumb img").attr("src").replace(/.*\/([A-Z0-9]*)_img_.*$/, "$1");
+            // 製品名
+            const title = $(element).find('.work_name a').text().trim(); ;
+            // カテゴリ名
+            const category = $(element).find(".work_category").text();
+            // 元の価格
+            const officialPrice = Number($(element).find(".work_price_original .work_price_base").text().replace(/,/, ''));
+            // 割引後の価格
+            const price = Number($(element).find(".work_price_discount .work_price_base").text().replace(/,/, ''));
+            // 割引率
+            const discount = officialPrice ? (100 - Math.round(price * 100 / officialPrice)) + "%" : "-";
+            // ポイント (5%固定)
+            const point = Math.round(price * 5 / 100);
+
             data.push({
-                name: name,
-                chart: style + difficulty,
-                rank: rank,
-                score: score,
-                timestamp: timestamp
+                today: today,
+                productId: productId,
+                title: title,
+                category: category,
+                officialPrice: officialPrice ? officialPrice : "-",
+                price: price,
+                discount: discount,
+                point: point
+            });
+        });
+
+        // クーポン情報を追加
+        $(".payment_confirm_box").each(function(index, element) {
+            // クーポン名
+            const title = $(element).find('.coupon_name').text();
+            // 元の価格
+            const officialPrice = Number($(element).find(".total_discount .work_price_base").text().replace(/,/, ''));
+            // 割引後の価格
+            const price = Number($(element).find(".coupon_detail .work_price_base").text().replace(/,/, ''));
+            // 割引率
+            const discount = (100 - Math.round(price * 100 / officialPrice)) + "%";
+
+            data.push({
+                today: today,
+                productId: "-",
+                title: title,
+                category: "-",
+                officialPrice: "-",
+                price: price - officialPrice,
+                discount: discount,
+                point: "-"
             });
         });
 
         // 送信確認
-        if (confirm("送信しますか？\nいいえの場合ダイアログ表示のみ行って終了します。")) {
+        if (confirm("買い物データをスプレッドシートへ送信します。\n"
+                    + "いいえの場合ダイアログ表示のみ行って終了します。")) {
             // 送信実行
             const funcMsg = (ev, res) => alert("[" + ev + "] status: " + res.status + "\n" + res.responseText);
             GM_xmlhttpRequest({
